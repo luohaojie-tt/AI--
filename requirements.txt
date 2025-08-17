@@ -1,0 +1,13 @@
+# 基础数据处理依赖
+numpy>=1.19.0
+matplotlib>=3.3.0
+pandas>=1.1.0
+
+# Plotly Dash UI框架依赖
+dash>=2.14.0
+dash-bootstrap-components>=1.5.0
+plotly>=5.17.0
+
+# 额外工具依赖
+colorlog>=6.7.0
+psutil>=5.9.0
