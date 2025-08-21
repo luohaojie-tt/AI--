@@ -19,14 +19,16 @@ SNR_SHOW/
 │   ├── test_all_features.py
 │   ├── test_filter_search.py
 │   ├── test_integration.py
-│   └── test_search_suggestions.py
+│   ├── test_search_suggestions.py
+│   └── bug_detector.py   # Bug检测脚本
 ├── data/                 # 数据文件
 │   ├── sample_snr_data.csv
 │   └── test_data.csv
 ├── docs/                 # 文档
 │   ├── PROJECT_STRUCTURE.md      # 项目结构说明
 │   ├── V1.0_RELEASE_NOTES.md     # V1.0版本发布说明
-│   └── V2.0_PLANNING.md          # V2.0版本规划
+│   ├── V2.0_PLANNING.md          # V2.0版本规划
+│   └── BUG_REPORT.md             # Bug检测报告
 ├── .claude/              # Claude相关配置
 ├── .git/                 # Git版本控制
 ├── .gitignore            # Git忽略文件配置
