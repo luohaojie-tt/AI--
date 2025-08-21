@@ -23,7 +23,11 @@ SNR_SHOW/
 │   ├── bug_detector.py   # Bug检测脚本
 │   ├── program_functionality_test.py  # 程序功能测试脚本
 │   ├── simplified_automated_gui_test.py  # 简化版自动化GUI测试脚本
-│   └── complete_functional_test_with_bug_detection.py  # 完整功能测试和bug检测脚本
+│   ├── complete_functional_test_with_bug_detection.py  # 完整功能测试和bug检测脚本
+│   ├── detailed_functional_test_for_specific_issues.py  # 针对性详细功能测试脚本
+│   ├── honest_problem_assessment.py  # 诚实问题评估脚本
+│   ├── honest_problem_diagnosis.py  # 诚实问题诊断脚本
+│   └── targeted_problem_test.py  # 针对性问题测试脚本
 ├── data/                 # 数据文件
 │   ├── sample_snr_data.csv
 │   └── test_data.csv
@@ -35,8 +39,13 @@ SNR_SHOW/
 │   ├── TEST_REPORT.md            # 程序测试报告
 │   ├── GUI_TEST_REPORT.md        # GUI测试报告
 │   ├── BUG_ANALYSIS_REPORT.md    # Bug分析报告
+│   ├── DETAILED_BUG_ANALYSIS_REPORT.md  # 详细Bug分析报告
+│   ├── HONEST_ASSESSMENT.md       # 诚实评估报告
+│   ├── HONEST_DIAGNOSIS_REPORT.md  # 诚实诊断报告
+│   ├── TARGETED_PROBLEM_TEST_REPORT.md  # 针对性问题测试报告
 │   ├── screenshots/              # 测试截图目录
-│   └── bug_reports/              # Bug报告目录
+│   ├── detailed_screenshots/     # 详细测试截图目录
+│   └── problem_testing_screenshots/  # 问题测试截图目录
 ├── .claude/              # Claude相关配置
 ├── .git/                 # Git版本控制
 ├── .gitignore            # Git忽略文件配置
