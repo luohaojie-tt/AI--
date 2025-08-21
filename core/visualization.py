@@ -4,6 +4,8 @@ SNR可视化工具可视化组件模块
 提供现代化的图表组件和可视化功能
 """
 
+import sys
+import os
 import plotly.graph_objects as go
 import plotly.express as px
 from plotly.subplots import make_subplots
@@ -11,8 +13,13 @@ import numpy as np
 import pandas as pd
 from typing import Dict, List, Any, Optional, Tuple
 import logging
-from config import ConfigManager
-from data_manager import DataManager, SNRDataPoint, format_hex
+
+# 添加项目根目录到Python路径
+project_root = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, project_root)
+
+from core.config import ConfigManager
+from core.data_manager import DataManager, SNRDataPoint, format_hex
 
 
 class BaseChart:

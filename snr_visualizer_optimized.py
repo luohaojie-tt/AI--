@@ -1,5 +1,6 @@
 import os
 import re
+import sys
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FuncFormatter
@@ -17,7 +18,16 @@ import threading
 import queue
 from concurrent.futures import ThreadPoolExecutor
 import time
-from data_manager import DataManager
+
+# 添加项目根目录和子目录到Python路径
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'core'))
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'filters'))
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ui'))
+
+from core.data_manager import DataManager
+from ui.filter_panel import FilterPanel, create_filter_window
+from ui.search_panel import SearchPanel, create_search_window
 
 # 配置中文字体支持，避免字体警告
 def configure_chinese_font():
@@ -101,6 +111,13 @@ class SNRVisualizerOptimized:
         self.is_processing = False
         self.cancel_current_task = False
         self.cache_enabled = True
+        
+        # 筛选和搜索面板
+        self.filter_window = None
+        self.search_window = None
+        self.filter_panel = None
+        self.search_panel = None
+        self.filtered_data = None  # 筛选后的数据
         
         # 绑定窗口关闭事件
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
@@ -230,8 +247,12 @@ class SNRVisualizerOptimized:
         # 分析按钮 - 改进样式
         analysis_frame = ttk.Frame(view_buttons_frame)
         analysis_frame.pack(side=tk.RIGHT)
+        ttk.Button(analysis_frame, text="🔍 数据筛选", command=self.open_filter_panel, style='Info.TButton').pack(side=tk.LEFT, padx=(0, 10))
+        ttk.Button(analysis_frame, text="🔎 数据搜索", command=self.open_search_panel, style='Info.TButton').pack(side=tk.LEFT, padx=(0, 10))
         ttk.Button(analysis_frame, text="🏆 查找全局最优配置", command=self.find_global_best, style='Success.TButton').pack(side=tk.LEFT, padx=(0, 10))
-        ttk.Button(analysis_frame, text="📊 导出分析数据", command=self.export_data, style='Warning.TButton').pack(side=tk.LEFT)
+        ttk.Button(analysis_frame, text="📊 导出分析数据", command=self.export_data, style='Warning.TButton').pack(side=tk.LEFT, padx=(0, 10))
+        ttk.Button(analysis_frame, text="💾 导出筛选结果", command=self.export_filtered_data, style='Warning.TButton').pack(side=tk.LEFT, padx=(0, 10))
+        ttk.Button(analysis_frame, text="📤 导出搜索结果", command=self.export_search_results, style='Warning.TButton').pack(side=tk.LEFT)
         
         # 创建图表区域 - 改进样式
         plot_frame = ttk.LabelFrame(main_frame, text="📊 SNR性能可视化图表", padding="15", style='Title.TLabelframe')
@@ -440,6 +461,8 @@ class SNRVisualizerOptimized:
             self.view_var.set("all")
             self.current_view = "all"
             self.update_plot()
+            # 同步数据到筛选和搜索面板
+            self.sync_data_to_panels()
             self.status_var.set(f"✅ 已加载文件: {os.path.basename(self.file_path)} - 共{len(self.data)}个配置")
         except Exception as e:
             self._handle_load_error(e, type(e).__name__)
@@ -1270,10 +1293,14 @@ class SNRVisualizerOptimized:
         y_data = plot_data.get('y_data', [])
         
         if x_data and y_data:
-            self.ax.plot(x_data, y_data, 'b-o', linewidth=2, markersize=4)
+            line, = self.ax.plot(x_data, y_data, 'b-o', linewidth=2, markersize=4)
             self.ax.set_xlabel(plot_data.get('x_label', 'X轴'))
             self.ax.set_ylabel('SNR (dB)')
-            self.ax.set_title(plot_data.get('title', '折线图'))
+            title = plot_data.get('title', '折线图')
+            # 如果有筛选数据，在标题中标识
+            if self.filtered_data and len(self.filtered_data) > 0:
+                title += f" - 筛选结果: {len(self.filtered_data)}个"
+            self.ax.set_title(title)
             self.ax.grid(True, alpha=0.3)
         else:
             self.ax.text(0.5, 0.5, '📊 没有数据可显示', 
@@ -1308,7 +1335,11 @@ class SNRVisualizerOptimized:
             # 设置标题和标签
             self.ax.set_xlabel(plot_data.get('x_label', 'X轴'))
             self.ax.set_ylabel(plot_data.get('y_label', 'Y轴'))
-            self.ax.set_title(plot_data.get('title', '热力图'))
+            title = plot_data.get('title', '热力图')
+            # 如果有筛选数据，在标题中标识
+            if self.filtered_data and len(self.filtered_data) > 0:
+                title += f" - 筛选结果: {len(self.filtered_data)}个"
+            self.ax.set_title(title)
             
             # 添加颜色条
             if self.current_colorbar:
@@ -1344,6 +1375,18 @@ class SNRVisualizerOptimized:
         post_values = [point['post'] for point in plot_data]
         snr_values = [point['snr'] for point in plot_data]
         
+        # 检查是否有筛选数据需要高亮显示
+        highlight_indices = []
+        if self.filtered_data and len(self.filtered_data) > 0:
+            # 创建筛选数据的集合以便快速查找
+            filtered_set = set((point.pre, point.main, point.post, point.snr) for point in self.filtered_data)
+            
+            # 找到需要高亮的数据点索引
+            for i, point in enumerate(plot_data):
+                point_tuple = (point['pre'], point['main'], point['post'], point['snr'])
+                if point_tuple in filtered_set:
+                    highlight_indices.append(i)
+        
         # 创建颜色映射
         norm = Normalize(vmin=min(snr_values), vmax=max(snr_values))
         colors = cm.viridis(norm(snr_values))
@@ -1352,13 +1395,32 @@ class SNRVisualizerOptimized:
         scatter = self.ax.scatter(pre_values, main_values, post_values, 
                                 c=snr_values, cmap='viridis', s=60, alpha=0.7, picker=True)
         
+        # 如果有筛选数据需要高亮显示，则绘制高亮点
+        if highlight_indices:
+            highlight_pre = [pre_values[i] for i in highlight_indices]
+            highlight_main = [main_values[i] for i in highlight_indices]
+            highlight_post = [post_values[i] for i in highlight_indices]
+            highlight_snr = [snr_values[i] for i in highlight_indices]
+            
+            # 绘制高亮点（更大的点，不同的颜色）
+            self.ax.scatter(highlight_pre, highlight_main, highlight_post, 
+                          c='red', s=100, alpha=1.0, edgecolors='black', linewidth=2,
+                          label=f'筛选结果 ({len(highlight_indices)}个)')
+        
         # 设置轴标签
         self.ax.set_xlabel('PRE 参数', fontsize=12, labelpad=10)
         self.ax.set_ylabel('MAIN 参数', fontsize=12, labelpad=10)
         self.ax.set_zlabel('POST 参数', fontsize=12, labelpad=10)
         
         # 设置标题
-        self.ax.set_title('🎯 三参数与SNR关系的3D散点图', fontsize=14, pad=20)
+        title = '🎯 三参数与SNR关系的3D散点图'
+        if highlight_indices:
+            title += f' - 筛选结果高亮显示'
+        self.ax.set_title(title, fontsize=14, pad=20)
+        
+        # 添加图例（如果有高亮点）
+        if highlight_indices:
+            self.ax.legend()
         
         # 添加颜色条
         if self.current_colorbar:
@@ -1376,6 +1438,8 @@ class SNRVisualizerOptimized:
         stats_text = f'数据点数: {len(plot_data)}\n'
         stats_text += f'SNR范围: {min(snr_values):.2f} ~ {max(snr_values):.2f} dB\n'
         stats_text += f'最优SNR: {max(snr_values):.2f} dB'
+        if highlight_indices:
+            stats_text += f'\n筛选结果: {len(highlight_indices)}个'
         
         # 在图表上添加统计信息
         self.ax.text2D(0.02, 0.98, stats_text, transform=self.ax.transAxes, 
@@ -1393,11 +1457,12 @@ class SNRVisualizerOptimized:
                 'xlabel': 'PRE 参数',
                 'ylabel': 'MAIN 参数',
                 'zlabel': 'POST 参数',
-                'title': '🎯 三参数与SNR关系的3D散点图',
+                'title': title,
                 'elev': 20,
                 'azim': 45,
                 'stats_text': stats_text,
-                'plot_data': plot_data
+                'plot_data': plot_data,
+                'highlight_indices': highlight_indices
             },
             'cache_key': self._get_cache_key()
         }
@@ -2085,6 +2150,205 @@ class SNRVisualizerOptimized:
             traceback.print_exc()
             messagebox.showerror("错误", f"导出失败：{str(e)}")
             self.status_var.set("❌ 导出失败")
+    
+    def open_filter_panel(self):
+        """打开数据筛选面板"""
+        if not self.data:
+            messagebox.showwarning("警告", "请先加载数据文件！")
+            return
+        
+        try:
+            # 如果筛选窗口已存在，则激活它
+            if self.filter_window and self.filter_window.winfo_exists():
+                self.filter_window.lift()
+                self.filter_window.focus_force()
+                return
+        except tk.TclError:
+            # 窗口已被销毁
+            self.filter_window = None
+        
+        # 创建新的筛选窗口
+        self.filter_window, self.filter_panel = create_filter_window(
+            title="SNR数据筛选工具"
+        )
+        # 设置数据和回调函数
+        self.filter_panel.set_data(self.data)
+        self.filter_panel.set_filter_changed_callback(self.on_filter_applied)
+    
+    def open_search_panel(self):
+        """打开数据搜索面板"""
+        if not self.data:
+            messagebox.showwarning("警告", "请先加载数据文件！")
+            return
+        
+        try:
+            # 如果搜索窗口已存在，则激活它
+            if self.search_window and self.search_window.winfo_exists():
+                self.search_window.lift()
+                self.search_window.focus_force()
+                return
+        except tk.TclError:
+            # 窗口已被销毁
+            self.search_window = None
+        
+        # 创建新的搜索窗口
+        self.search_window, self.search_panel = create_search_window(
+            title="SNR数据搜索工具"
+        )
+        # 设置数据和回调函数
+        self.search_panel.set_data(self.data)
+        self.search_panel.set_result_selected_callback(self.on_search_result_selected)
+    
+    def on_filter_applied(self, filtered_data):
+        """筛选应用回调函数"""
+        try:
+            self.filtered_data = filtered_data
+            
+            # 更新状态栏显示筛选结果
+            total_count = len(self.data)
+            filtered_count = len(filtered_data)
+            self.status_var.set(
+                f"🔍 筛选完成：{filtered_count}/{total_count} 条数据"
+            )
+            
+            # 可选：自动更新图表显示筛选后的数据
+            # 这里可以根据需要实现图表更新逻辑
+            
+        except Exception as e:
+            print(f"筛选回调错误: {str(e)}")
+            messagebox.showerror("错误", f"筛选结果处理失败：{str(e)}")
+    
+    def on_search_result_selected(self, selected_match):
+        """搜索结果选择回调函数"""
+        try:
+            if selected_match:
+                # 获取选中的数据点
+                selected_data = selected_match.point
+                
+                # 自动设置为选中的配置
+                self.current_pre = int(selected_data.pre)
+                self.current_main = int(selected_data.main)
+                self.current_post = int(selected_data.post)
+                
+                # 更新下拉框选择
+                try:
+                    pre_idx = self.pre_values.index(self.current_pre)
+                    main_idx = self.main_values.index(self.current_main)
+                    post_idx = self.post_values.index(self.current_post)
+                    
+                    self.pre_combobox.current(pre_idx)
+                    self.main_combobox.current(main_idx)
+                    self.post_combobox.current(post_idx)
+                except ValueError:
+                    pass  # 如果找不到对应的索引，忽略
+                
+                # 更新图表
+                self.update_plot()
+                
+                # 更新状态栏
+                self.status_var.set(
+                    f"🎯 已选择配置：Pre={self.current_pre}, Main={self.current_main}, "
+                    f"Post={self.current_post}, SNR={selected_data.snr:.2f}"
+                )
+                
+        except Exception as e:
+            print(f"搜索结果选择错误: {str(e)}")
+            messagebox.showerror("错误", f"搜索结果处理失败：{str(e)}")
+    
+    def sync_data_to_panels(self):
+        """同步数据到筛选和搜索面板"""
+        try:
+            # 如果筛选面板已打开，同步数据
+            if self.filter_panel:
+                self.filter_panel.set_data(self.data)
+            
+            # 如果搜索面板已打开，同步数据
+            if self.search_panel:
+                self.search_panel.set_data(self.data)
+                
+        except Exception as e:
+            print(f"数据同步错误: {str(e)}")
+    
+    def export_filtered_data(self):
+        """导出筛选结果数据"""
+        if not self.filtered_data or len(self.filtered_data) == 0:
+            messagebox.showinfo("信息", "没有筛选结果可导出，请先进行数据筛选")
+            return
+        
+        # 选择保存文件路径
+        file_path = filedialog.asksaveasfilename(
+            title="导出筛选结果",
+            defaultextension=".csv",
+            filetypes=[("CSV文件", "*.csv"), ("所有文件", "*.*")]
+        )
+        
+        if not file_path:
+            return
+        
+        # 保存为CSV文件
+        try:
+            import csv
+            with open(file_path, 'w', newline='', encoding='utf-8') as csvfile:
+                writer = csv.writer(csvfile)
+                
+                # 写入表头
+                writer.writerow(['PRE', 'MAIN', 'POST', 'SNR'])
+                
+                # 写入筛选后的数据
+                for point in self.filtered_data:
+                    writer.writerow([point.pre, point.main, point.post, point.snr])
+            
+            messagebox.showinfo("成功", f"筛选结果已导出到: {file_path}")
+        except Exception as e:
+            messagebox.showerror("错误", f"导出筛选结果失败: {str(e)}")
+    
+    def export_search_results(self):
+        """导出搜索结果数据"""
+        # 检查是否有打开的搜索面板并且有搜索结果
+        if not self.search_panel or not hasattr(self.search_panel, 'search_results') or not self.search_panel.search_results:
+            messagebox.showinfo("信息", "没有搜索结果可导出，请先进行数据搜索")
+            return
+        
+        search_results = self.search_panel.search_results
+        if len(search_results) == 0:
+            messagebox.showinfo("信息", "没有搜索结果可导出，请先进行数据搜索")
+            return
+        
+        # 选择保存文件路径
+        file_path = filedialog.asksaveasfilename(
+            title="导出搜索结果",
+            defaultextension=".csv",
+            filetypes=[("CSV文件", "*.csv"), ("所有文件", "*.*")]
+        )
+        
+        if not file_path:
+            return
+        
+        # 保存为CSV文件
+        try:
+            import csv
+            with open(file_path, 'w', newline='', encoding='utf-8') as csvfile:
+                writer = csv.writer(csvfile)
+                
+                # 写入表头
+                writer.writerow(['序号', 'PRE', 'MAIN', 'POST', 'SNR', '相似度', '匹配类型', '匹配字段'])
+                
+                # 写入搜索结果
+                for i, match in enumerate(search_results, 1):
+                    writer.writerow([
+                        i,
+                        match.point.pre,
+                        match.point.main,
+                        match.point.post,
+                        match.point.snr,
+                        match.score,
+                        match.match_type,
+                        ', '.join(match.matched_fields) if match.matched_fields else ''
+                    ])
+            
+            messagebox.showinfo("成功", f"搜索结果已导出到: {file_path}")
+        except Exception as e:
+            messagebox.showerror("错误", f"导出搜索结果失败: {str(e)}")
 
 if __name__ == "__main__":
     root = tk.Tk()
