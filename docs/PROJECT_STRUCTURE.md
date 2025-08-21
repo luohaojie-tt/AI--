@@ -22,7 +22,8 @@ SNR_SHOW/
 │   ├── test_search_suggestions.py
 │   ├── bug_detector.py   # Bug检测脚本
 │   ├── program_functionality_test.py  # 程序功能测试脚本
-│   └── simplified_automated_gui_test.py  # 简化版自动化GUI测试脚本
+│   ├── simplified_automated_gui_test.py  # 简化版自动化GUI测试脚本
+│   └── complete_functional_test_with_bug_detection.py  # 完整功能测试和bug检测脚本
 ├── data/                 # 数据文件
 │   ├── sample_snr_data.csv
 │   └── test_data.csv
@@ -33,7 +34,9 @@ SNR_SHOW/
 │   ├── BUG_REPORT.md             # Bug检测报告
 │   ├── TEST_REPORT.md            # 程序测试报告
 │   ├── GUI_TEST_REPORT.md        # GUI测试报告
-│   └── screenshots/              # 测试截图目录
+│   ├── BUG_ANALYSIS_REPORT.md    # Bug分析报告
+│   ├── screenshots/              # 测试截图目录
+│   └── bug_reports/              # Bug报告目录
 ├── .claude/              # Claude相关配置
 ├── .git/                 # Git版本控制
 ├── .gitignore            # Git忽略文件配置
