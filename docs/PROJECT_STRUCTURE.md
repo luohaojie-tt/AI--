@@ -1,10 +1,6 @@
-# SNR数据可视化工具 V1.0 项目结构说明
+# 项目结构说明
 
-## 项目概述
-
-SNR数据可视化工具是一个专业的信噪比(Signal-to-Noise Ratio)数据分析和可视化应用程序。该工具提供了多种图表类型和交互功能，帮助用户深入分析SNR数据的分布特征和关联关系。
-
-## 最终项目结构
+## 目录结构
 
 ```
 SNR_SHOW/
@@ -28,15 +24,9 @@ SNR_SHOW/
 │   ├── sample_snr_data.csv
 │   └── test_data.csv
 ├── docs/                 # 文档
-│   ├── V1.0_RELEASE_NOTES.md      # V1.0版本发布说明
-│   ├── PROJECT_STRUCTURE.md       # 项目结构说明
-│   ├── PROJECT_STATUS_REPORT.md   # 项目状态报告
-│   ├── V2.0_PLANNING.md           # V2.0版本规划
-│   ├── V2.1_DataFilter/           # V2.1数据筛选功能文档
-│   ├── V2.1数据筛选和搜索功能/       # V2.1数据筛选和搜索功能中文文档
-│   ├── UPDATE_LOG_20250821.md     # 2025年8月21日更新日志
-│   ├── SUMMARY_20250821.md        # 2025年8月21日工作总结
-│   └── ...
+│   ├── PROJECT_STRUCTURE.md      # 项目结构说明
+│   ├── V1.0_RELEASE_NOTES.md     # V1.0版本发布说明
+│   └── V2.0_PLANNING.md          # V2.0版本规划
 ├── .claude/              # Claude相关配置
 ├── .git/                 # Git版本控制
 ├── .gitignore            # Git忽略文件配置
