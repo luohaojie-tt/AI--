@@ -1,209 +1,188 @@
 # -*- coding: utf-8 -*-
 """
-SNR可视化工具配置管理模块
-提供主题配置、图表样式配置、应用设置等功能
+A股短线选股应用配置管理模块
+提供爬虫配置、数据库配置、选股策略配置等功能
 """
 
 import os
 from typing import Dict, Any, Optional
 import json
 from dataclasses import dataclass, asdict
+import logging
+from logging.handlers import RotatingFileHandler
 
 
 @dataclass
-class ThemeConfig:
-    """主题配置类"""
-    # 深色主题配色
-    primary_color: str = "#1f77b4"
-    secondary_color: str = "#ff7f0e"
-    background_color: str = "#2b2b2b"
-    surface_color: str = "#3c3c3c"
-    text_color: str = "#ffffff"
-    text_secondary: str = "#cccccc"
-    border_color: str = "#555555"
-    success_color: str = "#28a745"
-    warning_color: str = "#ffc107"
-    error_color: str = "#dc3545"
+class SpiderConfig:
+    """爬虫配置类"""
+    # 同花顺数据获取配置
+    thscode_base_url: str = "https://www.10jqka.com.cn"
+    hot_stocks_url: str = "https://www.10jqka.com.cn/"
+    trader_data_url: str = "https://www.10jqka.com.cn/trader/"
     
-    # 图表配色方案
-    chart_colors: list = None
+    # 请求配置
+    request_headers: Dict[str, str] = None
+    request_timeout: int = 10
+    request_interval: int = 5  # 请求间隔（秒）
+    max_retries: int = 3
+    
+    # 反爬虫配置
+    use_proxy: bool = False
+    proxy_list: list = None
+    use_cookie: bool = True
+    cookie_file: str = ".cookie.txt"
     
     def __post_init__(self):
-        if self.chart_colors is None:
-            self.chart_colors = [
-                "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728",
-                "#9467bd", "#8c564b", "#e377c2", "#7f7f7f",
-                "#bcbd22", "#17becf"
+        if self.request_headers is None:
+            self.request_headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "Accept-Language": "zh-CN,zh;q=0.8,en-US;q=0.5,en;q=0.3",
+                "Accept-Encoding": "gzip, deflate, br",
+                "Connection": "keep-alive",
+                "Upgrade-Insecure-Requests": "1"
+            }
+        
+        if self.proxy_list is None:
+            self.proxy_list = []
+
+
+@dataclass
+class DatabaseConfig:
+    """数据库配置类"""
+    # SQLite数据库配置
+    db_type: str = "sqlite"
+    db_path: str = "data/stock_data.db"
+    
+    # 数据库表名
+    hot_stocks_table: str = "hot_stocks"
+    trader_data_table: str = "trader_data"
+    stock_basic_table: str = "stock_basic"
+
+
+@dataclass
+class StrategyConfig:
+    """选股策略配置类"""
+    # 选股策略基础配置
+    selected_traders: list = None
+    max_stocks_per_day: int = 20
+    backtest_days: int = 30
+    
+    # 热门股筛选条件
+    min_volume: int = 1000000  # 最小成交量（手）
+    min_price_change: float = 5.0  # 最小涨跌幅（%）
+    max_price: float = 100.0  # 最大股价
+    min_price: float = 5.0  # 最小股价
+    
+    def __post_init__(self):
+        if self.selected_traders is None:
+            self.selected_traders = [
+                "只核大学生",
+                "A拉神灯",
+                "请叫我小莽夫",
+                "作手奇衡三",
+                "这股有毒",
+                "低调科科员",
+                "二池",
+                "青铜交易员",
+                "不颜不语"
             ]
 
 
 @dataclass
-class ChartConfig:
-    """图表配置类"""
-    # 折线图配置
-    line_width: int = 3
-    marker_size: int = 8
-    grid_alpha: float = 0.3
-    
-    # 热力图配置
-    colorscale: str = "Viridis"
-    show_colorbar: bool = True
-    
-    # 全局配置图配置
-    scatter_size: int = 10
-    scatter_opacity: float = 0.7
-    
-    # 图表尺寸
-    default_height: int = 500
-    default_width: int = 800
-    
-    # 动画配置
-    animation_duration: int = 500
-    
-
-@dataclass
-class UIConfig:
-    """UI配置类"""
-    # 布局配置
-    sidebar_width: str = "300px"
-    header_height: str = "60px"
-    
-    # 组件间距
-    component_margin: str = "10px"
-    section_padding: str = "20px"
-    
-    # 字体配置
-    font_family: str = "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif"
-    font_size_base: str = "14px"
-    font_size_small: str = "12px"
-    font_size_large: str = "16px"
-    
-    # 响应式断点
-    breakpoint_sm: str = "576px"
-    breakpoint_md: str = "768px"
-    breakpoint_lg: str = "992px"
-    breakpoint_xl: str = "1200px"
+class LogConfig:
+    """日志配置类"""
+    log_level: str = "INFO"
+    log_file: str = "logs/stock_selector.log"
+    log_format: str = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    max_bytes: int = 10 * 1024 * 1024  # 10MB
+    backup_count: int = 5
 
 
 class ConfigManager:
     """配置管理器"""
-    
     def __init__(self, config_file: str = "app_config.json"):
         self.config_file = config_file
-        self.theme = ThemeConfig()
-        self.chart = ChartConfig()
-        self.ui = UIConfig()
+        self.spider = SpiderConfig()
+        self.database = DatabaseConfig()
+        self.strategy = StrategyConfig()
+        self.log = LogConfig()
         self._load_config()
+        self._setup_logging()
     
-    def _load_config(self) -> None:
+    def _load_config(self):
         """从文件加载配置"""
         if os.path.exists(self.config_file):
             try:
                 with open(self.config_file, 'r', encoding='utf-8') as f:
                     config_data = json.load(f)
                 
-                # 更新主题配置
-                if 'theme' in config_data:
-                    for key, value in config_data['theme'].items():
-                        if hasattr(self.theme, key):
-                            setattr(self.theme, key, value)
+                # 更新爬虫配置
+                if 'spider' in config_data:
+                    for key, value in config_data['spider'].items():
+                        if hasattr(self.spider, key):
+                            setattr(self.spider, key, value)
                 
-                # 更新图表配置
-                if 'chart' in config_data:
-                    for key, value in config_data['chart'].items():
-                        if hasattr(self.chart, key):
-                            setattr(self.chart, key, value)
+                # 更新数据库配置
+                if 'database' in config_data:
+                    for key, value in config_data['database'].items():
+                        if hasattr(self.database, key):
+                            setattr(self.database, key, value)
                 
-                # 更新UI配置
-                if 'ui' in config_data:
-                    for key, value in config_data['ui'].items():
-                        if hasattr(self.ui, key):
-                            setattr(self.ui, key, value)
-                            
+                # 更新策略配置
+                if 'strategy' in config_data:
+                    for key, value in config_data['strategy'].items():
+                        if hasattr(self.strategy, key):
+                            setattr(self.strategy, key, value)
+                
             except Exception as e:
                 print(f"加载配置文件失败: {e}")
     
-    def save_config(self) -> None:
+    def _setup_logging(self):
+        """设置日志系统"""
+        # 创建日志目录
+        log_dir = os.path.dirname(self.log.log_file)
+        if log_dir and not os.path.exists(log_dir):
+            os.makedirs(log_dir)
+        
+        # 获取日志级别
+        log_level = getattr(logging, self.log.log_level.upper(), logging.INFO)
+        
+        # 创建日志格式
+        formatter = logging.Formatter(self.log.log_format)
+        
+        # 创建旋转文件处理器
+        file_handler = RotatingFileHandler(
+            self.log.log_file,
+            maxBytes=self.log.max_bytes,
+            backupCount=self.log.backup_count,
+            encoding='utf-8'
+        )
+        file_handler.setFormatter(formatter)
+        file_handler.setLevel(log_level)
+        
+        # 创建控制台处理器
+        console_handler = logging.StreamHandler()
+        console_handler.setFormatter(formatter)
+        console_handler.setLevel(log_level)
+        
+        # 获取根日志记录器
+        root_logger = logging.getLogger()
+        root_logger.setLevel(log_level)
+        root_logger.addHandler(file_handler)
+        root_logger.addHandler(console_handler)
+    
+    def save_config(self):
         """保存配置到文件"""
-        try:
-            config_data = {
-                'theme': asdict(self.theme),
-                'chart': asdict(self.chart),
-                'ui': asdict(self.ui)
-            }
-            
-            with open(self.config_file, 'w', encoding='utf-8') as f:
-                json.dump(config_data, f, indent=2, ensure_ascii=False)
-                
-        except Exception as e:
-            print(f"保存配置文件失败: {e}")
-    
-    def get_plotly_theme(self) -> Dict[str, Any]:
-        """获取Plotly图表主题配置"""
-        return {
-            'layout': {
-                'paper_bgcolor': self.theme.background_color,
-                'plot_bgcolor': self.theme.surface_color,
-                'font': {
-                    'color': self.theme.text_color,
-                    'family': self.ui.font_family,
-                    'size': 12
-                },
-                'colorway': self.theme.chart_colors,
-                'grid': {
-                    'color': self.theme.border_color
-                },
-                'xaxis': {
-                    'gridcolor': self.theme.border_color,
-                    'linecolor': self.theme.border_color,
-                    'tickcolor': self.theme.text_secondary,
-                    'tickfont': {'color': self.theme.text_secondary}
-                },
-                'yaxis': {
-                    'gridcolor': self.theme.border_color,
-                    'linecolor': self.theme.border_color,
-                    'tickcolor': self.theme.text_secondary,
-                    'tickfont': {'color': self.theme.text_secondary}
-                }
-            }
+        config_data = {
+            'spider': asdict(self.spider),
+            'database': asdict(self.database),
+            'strategy': asdict(self.strategy),
+            'log': asdict(self.log)
         }
-    
-    def get_dash_theme(self) -> str:
-        """获取Dash Bootstrap主题"""
-        # 返回深色主题
-        return "CYBORG"  # Bootstrap深色主题
-    
-    def update_theme_color(self, color_name: str, color_value: str) -> None:
-        """更新主题颜色"""
-        if hasattr(self.theme, color_name):
-            setattr(self.theme, color_name, color_value)
-            self.save_config()
-    
-    def update_chart_config(self, config_dict: Dict[str, Any]) -> None:
-        """更新图表配置"""
-        for config_name, config_value in config_dict.items():
-            if hasattr(self.chart, config_name):
-                setattr(self.chart, config_name, config_value)
-        self.save_config()
-    
-    def get_theme_config(self) -> ThemeConfig:
-        """获取主题配置"""
-        return self.theme
-    
-    def get_ui_config(self) -> UIConfig:
-        """获取UI配置"""
-        return self.ui
-    
-    def get_chart_config(self) -> ChartConfig:
-        """获取图表配置"""
-        return self.chart
-    
-    def reset_to_defaults(self) -> None:
-        """重置为默认配置"""
-        self.theme = ThemeConfig()
-        self.chart = ChartConfig()
-        self.ui = UIConfig()
-        self.save_config()
+        
+        with open(self.config_file, 'w', encoding='utf-8') as f:
+            json.dump(config_data, f, indent=2, ensure_ascii=False)
 
 
 # 全局配置实例
@@ -211,26 +190,34 @@ config_manager = ConfigManager()
 
 
 # 便捷访问函数
-def get_theme() -> ThemeConfig:
-    """获取主题配置"""
-    return config_manager.theme
+def get_config() -> ConfigManager:
+    """获取配置管理器实例"""
+    return config_manager
 
 
-def get_chart_config() -> ChartConfig:
-    """获取图表配置"""
-    return config_manager.chart
+def update_config(config_dict: Dict[str, Any]) -> None:
+    """更新配置"""
+    # 更新爬虫配置
+    if 'spider' in config_dict:
+        for key, value in config_dict['spider'].items():
+            if hasattr(config_manager.spider, key):
+                setattr(config_manager.spider, key, value)
+    # 更新数据库配置
+    if 'database' in config_dict:
+        for key, value in config_dict['database'].items():
+            if hasattr(config_manager.database, key):
+                setattr(config_manager.database, key, value)
+    # 更新策略配置
+    if 'strategy' in config_dict:
+        for key, value in config_dict['strategy'].items():
+            if hasattr(config_manager.strategy, key):
+                setattr(config_manager.strategy, key, value)
+    # 保存配置
+    config_manager.save_config()
 
 
-def get_ui_config() -> UIConfig:
-    """获取UI配置"""
-    return config_manager.ui
-
-
-def get_plotly_theme() -> Dict[str, Any]:
-    """获取Plotly主题"""
-    return config_manager.get_plotly_theme()
-
-
-def get_dash_theme() -> str:
-    """获取Dash主题"""
-    return config_manager.get_dash_theme()
+def reset_config() -> ConfigManager:
+    """重置配置"""
+    global config_manager
+    config_manager = ConfigManager()
+    return config_manager

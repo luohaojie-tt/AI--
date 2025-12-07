@@ -95,7 +95,7 @@ class SNRVisualizerOptimized:
         self.current_pre = None
         self.current_main = None
         self.current_post = None
-        self.current_view = "line"  # Current view mode: "line", "heatmap", or "all"
+        self.current_view = "heatmap"  # Current view mode: "heatmap" or "scatter3d"
         self.current_colorbar = None  # 用于跟踪当前的颜色条，避免重复叠加
         self.loading = False  # 加载状态标志
         
@@ -229,20 +229,14 @@ class SNRVisualizerOptimized:
         view_frame = ttk.Frame(view_buttons_frame)
         view_frame.pack(side=tk.LEFT, fill=tk.X, expand=True)
         ttk.Label(view_frame, text="视图模式:", style='Header.TLabel').pack(side=tk.LEFT, padx=(0, 15))
-        self.view_var = tk.StringVar(value="line")
+        self.view_var = tk.StringVar(value="heatmap")
         
         # 改进单选按钮样式
-        self.line_radio = ttk.Radiobutton(view_frame, text="📈 折线图", variable=self.view_var, value="line", command=self.change_view)
-        self.line_radio.pack(side=tk.LEFT, padx=(0, 15))
-        
         self.heatmap_radio = ttk.Radiobutton(view_frame, text="🔥 热力图", variable=self.view_var, value="heatmap", command=self.change_view)
         self.heatmap_radio.pack(side=tk.LEFT, padx=(0, 15))
         
         self.scatter3d_radio = ttk.Radiobutton(view_frame, text="🎯 3D散点图", variable=self.view_var, value="scatter3d", command=self.change_view)
         self.scatter3d_radio.pack(side=tk.LEFT, padx=(0, 15))
-        
-        self.all_radio = ttk.Radiobutton(view_frame, text="🌐 全部配置", variable=self.view_var, value="all", command=self.change_view)
-        self.all_radio.pack(side=tk.LEFT)
         
         # 分析按钮 - 改进样式
         analysis_frame = ttk.Frame(view_buttons_frame)
@@ -1094,17 +1088,21 @@ class SNRVisualizerOptimized:
         current_main = self.current_main
         current_post = self.current_post
         
-        if self.pre_combobox.get():
+        # 更新当前参数值
+        if self.pre_combobox.get() != "":
             pre_index = self.pre_combobox.current()
-            current_pre = self.pre_values[pre_index] if pre_index >= 0 else self.pre_values[0]
+            if 0 <= pre_index < len(self.pre_values):
+                current_pre = self.pre_values[pre_index]
         
-        if self.main_combobox.get():
+        if self.main_combobox.get() != "":
             main_index = self.main_combobox.current()
-            current_main = self.main_values[main_index] if main_index >= 0 else self.main_values[0]
+            if 0 <= main_index < len(self.main_values):
+                current_main = self.main_values[main_index]
         
-        if self.post_combobox.get():
+        if self.post_combobox.get() != "":
             post_index = self.post_combobox.current()
-            current_post = self.post_values[post_index] if post_index >= 0 else self.post_values[0]
+            if 0 <= post_index < len(self.post_values):
+                current_post = self.post_values[post_index]
         
         return f"{self.current_view}_{current_pre}_{current_main}_{current_post}"
     
@@ -1112,31 +1110,30 @@ class SNRVisualizerOptimized:
         """异步绘制图表"""
         try:
             # 获取当前选择的参数值
-            if self.pre_combobox.get():
+            if self.pre_combobox.get() != "":
                 pre_index = self.pre_combobox.current()
-                self.current_pre = self.pre_values[pre_index] if pre_index >= 0 else self.pre_values[0]
+                if 0 <= pre_index < len(self.pre_values):
+                    self.current_pre = self.pre_values[pre_index]
             
-            if self.main_combobox.get():
+            if self.main_combobox.get() != "":
                 main_index = self.main_combobox.current()
-                self.current_main = self.main_values[main_index] if main_index >= 0 else self.main_values[0]
+                if 0 <= main_index < len(self.main_values):
+                    self.current_main = self.main_values[main_index]
             
-            if self.post_combobox.get():
+            if self.post_combobox.get() != "":
                 post_index = self.post_combobox.current()
-                self.current_post = self.post_values[post_index] if post_index >= 0 else self.post_values[0]
+                if 0 <= post_index < len(self.post_values):
+                    self.current_post = self.post_values[post_index]
             
             if self.cancel_current_task:
                 return None
             
             # 获取绘图数据（这部分在后台线程中执行）
             plot_data = None
-            if self.current_view == "line":
-                plot_data = self._get_line_chart_data_async()
-            elif self.current_view == "heatmap":
+            if self.current_view == "heatmap":
                 plot_data = self._get_heatmap_data_async()
             elif self.current_view == "scatter3d":
                 plot_data = self._get_scatter3d_data_async()
-            elif self.current_view == "all":
-                plot_data = self._get_all_configurations_data_async()
             
             if self.cancel_current_task:
                 return None
@@ -1176,23 +1173,27 @@ class SNRVisualizerOptimized:
         """处理绘图成功"""
         try:
             # 在主线程中更新UI
-            self.ax.clear()
+            # 对于3D散点图，需要重新创建3D子图
+            if result['view_type'] == "scatter3d":
+                self.fig.clear()
+                self.ax = self.fig.add_subplot(111, projection='3d')
+            else:
+                self.ax.clear()
             
             # 移除之前的颜色条
             if self.current_colorbar:
-                self.current_colorbar.remove()
+                try:
+                    self.current_colorbar.remove()
+                except:
+                    pass
                 self.current_colorbar = None
             
             # 根据视图类型绘制图表
             plot_data = result['plot_data']
-            if result['view_type'] == "line":
-                self._draw_line_chart(plot_data)
-            elif result['view_type'] == "heatmap":
+            if result['view_type'] == "heatmap":
                 self._draw_heatmap(plot_data)
             elif result['view_type'] == "scatter3d":
                 self._draw_scatter3d(plot_data)
-            elif result['view_type'] == "all":
-                self._draw_all_configurations(plot_data)
             
             # 缓存绘图数据
             if self.cache_enabled and plot_data is not None:
@@ -1221,19 +1222,7 @@ class SNRVisualizerOptimized:
         self.is_processing = False
         self.cancel_current_task = False
     
-    def _get_line_chart_data_async(self):
-        """异步获取折线图数据"""
-        # 构建参数字典
-        params = {
-            'pre': self.current_pre,
-            'main': self.current_main,
-            'post': self.current_post,
-            'group_by': 'main',  # 默认按main分组
-            'x_axis': 'pre'      # 默认x轴为pre
-        }
-        # 复用data_manager的get_line_chart_data方法
-        return self.data_manager.get_line_chart_data(params)
-    
+
     def _get_heatmap_data_async(self):
         """异步获取热力图数据"""
         # 构建参数字典
@@ -1246,9 +1235,18 @@ class SNRVisualizerOptimized:
     
     def _get_all_configurations_data_async(self):
         """异步获取所有配置数据"""
-        # 这里可以实现获取所有配置的数据逻辑
-        # 暂时返回空字典
-        return {}
+        if not self.data or len(self.data) == 0:
+            return None
+        
+        # 准备所有配置数据
+        all_config_data = {
+            'total_points': len(self.data),
+            'pre_values': self.pre_values,
+            'main_values': self.main_values,
+            'post_values': self.post_values
+        }
+        
+        return all_config_data
     
     def _get_scatter3d_data_async(self):
         """异步获取3D散点图数据"""
@@ -1280,32 +1278,6 @@ class SNRVisualizerOptimized:
         
         return scatter_data
     
-    def _draw_line_chart(self, plot_data):
-        """绘制折线图"""
-        if 'error' in plot_data:
-            self.ax.text(0.5, 0.5, f"❌ {plot_data['error']}", 
-                        horizontalalignment='center', verticalalignment='center',
-                        transform=self.ax.transAxes, fontsize=12, color='red')
-            return
-        
-        # 绘制折线图
-        x_data = plot_data.get('x_data', [])
-        y_data = plot_data.get('y_data', [])
-        
-        if x_data and y_data:
-            line, = self.ax.plot(x_data, y_data, 'b-o', linewidth=2, markersize=4)
-            self.ax.set_xlabel(plot_data.get('x_label', 'X轴'))
-            self.ax.set_ylabel('SNR (dB)')
-            title = plot_data.get('title', '折线图')
-            # 如果有筛选数据，在标题中标识
-            if self.filtered_data and len(self.filtered_data) > 0:
-                title += f" - 筛选结果: {len(self.filtered_data)}个"
-            self.ax.set_title(title)
-            self.ax.grid(True, alpha=0.3)
-        else:
-            self.ax.text(0.5, 0.5, '📊 没有数据可显示', 
-                        horizontalalignment='center', verticalalignment='center',
-                        transform=self.ax.transAxes, fontsize=12, color='gray')
     
     def _draw_heatmap(self, plot_data):
         """绘制热力图"""
@@ -1350,12 +1322,6 @@ class SNRVisualizerOptimized:
                         horizontalalignment='center', verticalalignment='center',
                         transform=self.ax.transAxes, fontsize=12, color='gray')
     
-    def _draw_all_configurations(self, plot_data):
-        """绘制所有配置图表"""
-        # 暂时显示提示信息
-        self.ax.text(0.5, 0.5, '🔄 所有配置视图开发中...', 
-                    horizontalalignment='center', verticalalignment='center',
-                    transform=self.ax.transAxes, fontsize=12, color='orange')
     
     def _draw_scatter3d(self, plot_data):
         """绘制3D散点图"""
@@ -1525,7 +1491,7 @@ class SNRVisualizerOptimized:
                                                      horizontalalignment='left',
                                                      zorder=1000)
                     
-                    print(f"✅ 精确选中数据点 {point_index}: PRE={point['pre']}, MAIN={point['main']}, POST={point['post']}, SNR={point['snr']:.2f}")
+                    print(f"精确选中数据点 {point_index}: PRE={point['pre']}, MAIN={point['main']}, POST={point['post']}, SNR={point['snr']:.2f}")
                     self.canvas.draw_idle()
         
         # 绑定专业的拾取事件
@@ -1560,6 +1526,47 @@ class SNRVisualizerOptimized:
     # 旧的屏幕坐标检测方法已被专业的pick_event替代
     
     # 旧的简化检测方法已被专业的pick_event替代
+    
+    def on_heatmap_click(self, event):
+        """处理热力图鼠标点击事件"""
+        if event.inaxes != self.ax:
+            return
+        
+        # 获取点击位置的坐标
+        x, y = event.xdata, event.ydata
+        
+        # 获取当前热力图数据
+        if not hasattr(self, 'current_plot_cache') or not self.current_plot_cache or self.current_plot_cache.get('type') != 'heatmap':
+            print("热力图缓存数据不可用")
+            return
+        
+        heatmap_data = self.current_plot_cache['data']
+        values = np.array(heatmap_data['values'])
+        xticks = heatmap_data['xticks']
+        yticks = heatmap_data['yticks']
+        xticklabels = heatmap_data['xticklabels']
+        yticklabels = heatmap_data['yticklabels']
+        
+        # 找到最近的格子索引
+        if len(xticks) > 0 and len(yticks) > 0:
+            x_idx = np.abs(xticks - x).argmin()
+            y_idx = np.abs(yticks - y).argmin()
+            
+            if 0 <= x_idx < len(xticklabels) and 0 <= y_idx < len(yticklabels):
+                # 获取对应的参数值
+                pre_value = yticklabels[y_idx]
+                main_value = xticklabels[x_idx]
+                snr_value = values[y_idx, x_idx]
+                
+                # 显示点击信息
+                info_text = f"点击位置: Pre={pre_value}, Main={main_value}\nSNR值: {snr_value:.3f}"
+                self.status_var.set(info_text)
+                
+                # 更新信息显示区域
+                self.info_text.config(state=tk.NORMAL)
+                self.info_text.delete(1.0, tk.END)
+                self.info_text.insert(tk.END, f"🔍 热力图点击信息\n\n{info_text}")
+                self.info_text.config(state=tk.DISABLED)
     
     def _redraw_scatter_plot(self):
         """重新绘制散点图（用于双击重置视角后恢复数据显示）"""
@@ -1632,31 +1639,33 @@ class SNRVisualizerOptimized:
     def restore_plot_from_cache(self, cached_data):
         """从缓存恢复绘图"""
         try:
-            # 清除当前图表
-            self.ax.clear()
+            # 检查缓存数据格式
+            if not isinstance(cached_data, dict) or 'type' not in cached_data:
+                print("缓存数据格式错误")
+                return
+                
+            # 根据图表类型清除当前图表
+            if cached_data['type'] == 'scatter3d':
+                # 对于3D散点图，需要重新创建3D子图
+                self.fig.clear()
+                self.ax = self.fig.add_subplot(111, projection='3d')
+            else:
+                # 对于其他图表类型，清除当前轴
+                self.ax.clear()
+            
+            # 移除之前的颜色条
             if self.current_colorbar:
-                self.current_colorbar.remove()
+                try:
+                    self.current_colorbar.remove()
+                except:
+                    pass
                 self.current_colorbar = None
             
             # 恢复缓存的绘图数据
             plot_type = cached_data['type']
             data = cached_data['data']
             
-            if plot_type == 'line':
-                self.ax.plot(data['x'], data['y'], color='blue', marker='o', linewidth=2, markersize=4, alpha=0.8)
-                self.ax.set_xlabel(data['xlabel'], fontsize=12, color='black')
-                self.ax.set_ylabel(data['ylabel'], fontsize=12, color='black')
-                self.ax.set_title(data['title'], fontsize=14, color='black')
-                self.ax.grid(True, alpha=0.3, color='gray')
-                self.ax.tick_params(axis='both', colors='black')
-                
-                # 恢复统计信息
-                if 'stats_text' in data:
-                    self.ax.text(0.02, 0.98, data['stats_text'], transform=self.ax.transAxes, 
-                                verticalalignment='top', color='black',
-                                bbox=dict(boxstyle='round', facecolor='white', alpha=0.8, edgecolor='gray'))
-            
-            elif plot_type == 'heatmap':
+            if plot_type == 'heatmap':
                 im = self.ax.imshow(data['values'], cmap='viridis', aspect='auto', interpolation='nearest')
                 self.ax.set_xticks(data['xticks'])
                 self.ax.set_yticks(data['yticks'])
@@ -1675,28 +1684,20 @@ class SNRVisualizerOptimized:
                     for annotation in data['text_annotations']:
                         self.ax.text(annotation['x'], annotation['y'], annotation['text'], 
                                    ha='center', va='center', color=annotation['color'])
-            
-            elif plot_type == 'bar':
-                bars = self.ax.bar(data['x'], data['y'], yerr=data.get('yerr'), capsize=3, alpha=0.8, color=data['colors'])
-                self.ax.set_xlabel(data['xlabel'], fontsize=12, color='black')
-                self.ax.set_ylabel(data['ylabel'], fontsize=12, color='black')
-                self.ax.set_title(data['title'], fontsize=14, color='black')
-                self.ax.set_xticks(data['xticks'])
-                self.ax.set_xticklabels(data['xticklabels'], rotation=45, ha='right', color='black')
-                self.ax.grid(True, alpha=0.3, axis='y', color='gray')
-                self.ax.tick_params(axis='both', colors='black')
                 
-                # 恢复数值标签
-                if 'value_labels' in data:
-                    for i, (bar, label) in enumerate(zip(bars, data['value_labels'])):
-                        self.ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.1, 
-                                   label, ha='center', va='bottom', fontsize=8, color='black')
+                # 保存当前热力图数据到缓存属性
+                self.current_plot_cache = {
+                    'type': 'heatmap',
+                    'data': {
+                        'values': data['values'],
+                        'xticks': data['xticks'],
+                        'yticks': data['yticks'],
+                        'xticklabels': data['xticklabels'],
+                        'yticklabels': data['yticklabels']
+                    }
+                }
             
             elif plot_type == 'scatter3d':
-                # 重新创建3D子图
-                self.fig.clear()
-                self.ax = self.fig.add_subplot(111, projection='3d')
-                
                 # 恢复3D散点图
                 scatter = self.ax.scatter(data['pre_values'], data['main_values'], data['post_values'], 
                                         c=data['snr_values'], cmap='viridis', s=60, alpha=0.7)
@@ -1708,8 +1709,6 @@ class SNRVisualizerOptimized:
                 self.ax.set_title(data['title'], fontsize=14, pad=20)
                 
                 # 恢复颜色条
-                if self.current_colorbar:
-                    self.current_colorbar.remove()
                 self.current_colorbar = self.fig.colorbar(scatter, ax=self.ax, shrink=0.8, aspect=20)
                 self.current_colorbar.set_label('SNR (dB)', fontsize=12)
                 
@@ -1733,94 +1732,21 @@ class SNRVisualizerOptimized:
         except Exception as e:
             print(f"缓存恢复失败: {str(e)}")
             # 如果缓存恢复失败，清除缓存但不重新绘制（避免递归）
-            self.plot_cache.pop(cached_data.get('cache_key', ''), None)
+            if isinstance(cached_data, dict):
+                self.plot_cache.pop(cached_data.get('cache_key', ''), None)
             # 清空图表并显示错误信息
             self.ax.clear()
-            self.ax.text(0.5, 0.5, '缓存数据损坏，请重新加载文件', 
-                        ha='center', va='center', transform=self.ax.transAxes, 
-                        fontsize=12, color='red')
+            if hasattr(self.ax, 'text'):
+                self.ax.text(0.5, 0.5, '缓存数据损坏，请重新加载文件', 
+                            ha='center', va='center', transform=self.ax.transAxes, 
+                            fontsize=12, color='red')
+            else:
+                # 对于3D轴，使用text2D
+                self.ax.text2D(0.5, 0.5, '缓存数据损坏，请重新加载文件', 
+                              ha='center', va='center', transform=self.ax.transAxes, 
+                              fontsize=12, color='red')
             self.canvas.draw()
     
-    def plot_line_chart(self):
-        """绘制折线图 - 优化性能，支持缓存"""
-        try:
-            # 筛选数据 - 修复：使用DataFrame进行筛选
-            filtered_data = self.df[
-                (self.df['pre'] == self.current_pre) & 
-                (self.df['main'] == self.current_main) & 
-                (self.df['post'] == self.current_post)
-            ]
-            
-            if filtered_data.empty:
-                self.ax.text(0.5, 0.5, '❌ 没有找到匹配的数据', 
-                           horizontalalignment='center', verticalalignment='center',
-                           transform=self.ax.transAxes, fontsize=14, color='red')
-                return None
-            
-            # 准备绘图数据
-            x_data = list(range(len(filtered_data)))
-            y_data = filtered_data['snr'].values.tolist()
-            
-            # 绘制折线图
-            self.ax.plot(x_data, y_data, color='blue', marker='o', linewidth=2, markersize=4, alpha=0.8)
-            
-            # 设置标签和标题
-            xlabel = '数据点索引'
-            ylabel = 'SNR值'
-            title = f'SNR折线图 (Pre:{self.format_hex(self.current_pre)}, Main:{self.format_hex(self.current_main)}, Post:{self.format_hex(self.current_post)})'
-            
-            self.ax.set_xlabel(xlabel, fontsize=12, color='black')
-            self.ax.set_ylabel(ylabel, fontsize=12, color='black')
-            self.ax.set_title(title, fontsize=14, color='black')
-            self.ax.grid(True, alpha=0.3, color='gray')
-            
-            # 设置坐标轴刻度标签颜色
-            self.ax.tick_params(axis='both', colors='black')
-            
-            # 添加统计信息
-            mean_snr = np.mean(y_data)
-            max_snr = np.max(y_data)
-            min_snr = np.min(y_data)
-            
-            stats_text = f'平均值: {mean_snr:.2f}\n最大值: {max_snr:.2f}\n最小值: {min_snr:.2f}'
-            self.ax.text(0.02, 0.98, stats_text, transform=self.ax.transAxes, 
-                        verticalalignment='top', color='black',
-                        bbox=dict(boxstyle='round', facecolor='white', alpha=0.8, edgecolor='gray'))
-            
-            # 返回缓存数据
-            return {
-                'type': 'line',
-                'data': {
-                    'x': x_data,
-                    'y': y_data,
-                    'xlabel': xlabel,
-                    'ylabel': ylabel,
-                    'title': title,
-                    'stats_text': stats_text
-                }
-            }
-            
-        except KeyError as e:
-            error_msg = f"数据列缺失: {e}"
-            print(f"折线图绘制错误: {error_msg}")
-            self.ax.text(0.5, 0.5, f'❌ {error_msg}', 
-                       horizontalalignment='center', verticalalignment='center',
-                       transform=self.ax.transAxes, fontsize=12, color='red')
-            return None
-        except ValueError as e:
-            error_msg = f"数据值错误: {e}"
-            print(f"折线图绘制错误: {error_msg}")
-            self.ax.text(0.5, 0.5, f'❌ {error_msg}', 
-                       horizontalalignment='center', verticalalignment='center',
-                       transform=self.ax.transAxes, fontsize=12, color='red')
-            return None
-        except Exception as e:
-            error_msg = f"绘图错误: {str(e)}"
-            print(f"折线图绘制错误: {error_msg}")
-            self.ax.text(0.5, 0.5, f'❌ {error_msg}', 
-                       horizontalalignment='center', verticalalignment='center',
-                       transform=self.ax.transAxes, fontsize=12, color='red')
-            return None
     
     def plot_heatmap(self):
         """绘制热力图 - 优化显示效果，支持缓存"""
@@ -1881,6 +1807,21 @@ class SNRVisualizerOptimized:
                         text_annotations.append({
                             'x': j, 'y': i, 'text': text, 'color': color
                         })
+            
+            # 绑定鼠标点击事件
+            self.fig.canvas.mpl_connect('button_press_event', self.on_heatmap_click)
+            
+            # 保存当前热力图数据到缓存属性
+            self.current_plot_cache = {
+                'type': 'heatmap',
+                'data': {
+                    'values': values.tolist(),
+                    'xticks': xticks,
+                    'yticks': yticks,
+                    'xticklabels': xticklabels,
+                    'yticklabels': yticklabels
+                }
+            }
             
             # 返回缓存数据
             return {

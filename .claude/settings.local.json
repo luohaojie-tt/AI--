@@ -1,7 +1,13 @@
 {
   "permissions": {
     "allow": [
-      "WebSearch"
+      "WebSearch",
+      "Bash(python:*)",
+      "mcp__context7__resolve-library-id",
+      "mcp__context7__get-library-docs",
+      "WebFetch(domain:www.gigadevice.com.cn)",
+      "WebFetch(domain:www.st.com)",
+      "WebFetch(domain:www.gigadevice.com)"
     ],
     "deny": [],
     "ask": []
